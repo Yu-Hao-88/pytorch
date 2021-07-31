@@ -1,9 +1,24 @@
 # pytorch
 
-## 安裝套件
+## 初始化
+建立 conda env 和 activate:
+```bash=
+conda create --name pytorch python=3.6.8
+conda avtivate pytorch
+#移除環境
+conda env remove --name pytorch
+```
+安裝套件:
+```bash=
 pip install -r requirements.txt
 
 conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
+```
+
+開啟 Jupyter Notebook:
+```bash=
+Jupyter Notebook
+```
 
 ## pytorch 常用函式庫
 - 建構神經網路的核心模組位於 torch.nn 中，常見的有:
