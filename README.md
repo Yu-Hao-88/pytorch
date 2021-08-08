@@ -31,6 +31,16 @@ Jupyter Notebook
     - DataLoader，他可以在後台生成子程序( child process )，並從資料集中在入資料
 - 使用多個GPU或者讓多台機器同時訓練模型，可用 torch.nn.parallel.DistributedDataParallel 和 torch.distributed 來利用額外的硬體資源
 - torch.optim 提供了優化模型的標準方法
+- dtype 總覽:
+    - torch.float32 or torch.float:32位元的單精度浮點數 (預設
+    - torch.float64 or torch.double:64位元的雙精度浮點數
+    - torch.float16 or torch.half:16位元的半精度浮點數
+    - torch.int8:8位元的整數
+    - torch.uint8:8位元的正整數
+    - torch.int16 or torch.short:16位元的整數
+    - torch.int32 or torch.int:32位元的整數
+    - torch.int64 or torch.long:64位元的整數
+    - torch.bool:布林值
 
 ## 筆記
 - 利用深度學習來完成任務需要的條件:
@@ -41,3 +51,4 @@ Jupyter Notebook
     1. 一組訓練資料集
     2. 一個可根據【訓練資料集】去調整【模型參數】的優化器
     3. 一個將模型和資料與硬體整合，並利用硬體來進行訓練的方法
+
