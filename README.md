@@ -68,3 +68,13 @@ Jupyter Notebook
     - 一個 storage 儲存了包含數值資料的 1軸連續陣列，可為 float32、int64 ......
     - 張量是用來呈現 storage 的視圖(view)，它讓我們能依照偏移量(offset)和步長(stride)來索引 storage 的內容
     - 張量能用多種方式對同一個 storage 進行索引，進而產生不同的張量，ex: 對同為1維陣列的 storage，分別以 (3, 2) (2, 3) 等不同 shape 來取用它，則會產生不同的 shape 的 tensoe 
+- 要對 storage 進行索引，張量必須一類一些和 storage 相關的資訊:
+    - 大小(size)(在 NumPy 中稱為 shape):
+        - 是一個 tuple，表示張量在軸上有多少元素
+        - ex: (列, 行) => (2, 3)，表示 有2列，每一列3個元素
+    - 偏移(offset)
+        - 是張量中首個元素在 storage 中的索引值，預設是 0
+        - ex: offset=1，則張量的首個元素在 storage 中索引為 1
+    - 步長(stride)
+        - 是在提取各軸的下一個元素時，需要跳過的元素數量
+        - ex: stride = (3, 1)，表示 +3 => next row，+1 => next col
