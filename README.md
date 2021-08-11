@@ -83,3 +83,4 @@ Jupyter Notebook
     storage_offset + stride[0] * i + stride[1] * j
     ```
     - 張量和 storage 的間接轉換讓一些操作(ex: 轉置張量或提取子張量)變得方便，因為記憶體無需重新分配，透過修改大小、偏移、步長產生一個新的張量
+    - 轉置的概念就是 步長 x,y => y,x 交換
