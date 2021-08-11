@@ -78,3 +78,8 @@ Jupyter Notebook
     - 步長(stride)
         - 是在提取各軸的下一個元素時，需要跳過的元素數量
         - ex: stride = (3, 1)，表示 +3 => next row，+1 => next col
+    - 要知道索引(i, j)的元素在 storage 中的索引值，可透過以下取得:
+    ```python
+    storage_offset + stride[0] * i + stride[1] * j
+    ```
+    - 張量和 storage 的間接轉換讓一些操作(ex: 轉置張量或提取子張量)變得方便，因為記憶體無需重新分配，透過修改大小、偏移、步長產生一個新的張量
