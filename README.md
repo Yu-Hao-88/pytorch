@@ -41,7 +41,19 @@ Jupyter Notebook
     - torch.int32 or torch.int:32位元的整數
     - torch.int64 or torch.long:64位元的整數
     - torch.bool:布林值
-
+- 常見 tensor 的操作:
+    - Creation:用來創建張量的函式，ex:zeros(), ones()
+    - Indexing、Slicing:用來改變張量的 shape 或內容的函式，ex:transpose()
+    - Math:可以對張量數值進行運算的函式
+        - Pointwise:對每一個元素進行轉換，並得到一個新張量，ex:abs()、cos()
+        - Reduction:以迭代的方式對多個元素進行運算，ex:mean()、std()、norm()
+        - Comparision:對張量內的元素值進行比較，ex:equal()、max()
+        - Spectral:用來在頻域(frequency domain)和時域(time domain)中進行轉換和操作的函式，ex:stft()、hamming_window()
+        - BLAS、LAPACK:BLAS代表基礎線性代數程式集(Basic Linear Algebra Subprograms)，LAPACK則代表線性代數套件(Linear Algebra PACKage)，它們專門用來處理純量、向量及陣列間的操作
+        - 其他操作:特殊用途的函式，ex:針對向量的cross()、針對矩陣的trace()
+    - Random sampling:透過不同的機率分布進行隨機取樣，可用來生成亂數，ex:randn()、normal()
+    - Serialization:用來讀取與儲存張量的函式，ex:load()、save()
+    - Parallelism:在CPU的平行處理中，用來控制執行敘數量的函式，ex:set_num_threads()
 ## 筆記
 - 利用深度學習來完成任務需要的條件:
     1. 找到能處理輸入資料的方法
