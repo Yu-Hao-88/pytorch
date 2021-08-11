@@ -13,6 +13,8 @@ conda env remove --name pytorch
 pip install -r requirements.txt
 
 conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c conda-forge
+
+conda install h5py
 ```
 
 開啟 Jupyter Notebook:
@@ -54,6 +56,7 @@ Jupyter Notebook
     - Random sampling:透過不同的機率分布進行隨機取樣，可用來生成亂數，ex: randn()、normal()
     - Serialization:用來讀取與儲存張量的函式，ex: load()、save()
     - Parallelism:在CPU的平行處理中，用來控制執行敘數量的函式，ex: set_num_threads()
+    - 函式若結尾有 _ ，表示該方法為 in-place 操作，會直接修改記憶體內的值，而不是複製一份原始資料，處理後再傳回新張量
 ## 筆記
 - 利用深度學習來完成任務需要的條件:
     1. 找到能處理輸入資料的方法
@@ -90,3 +93,4 @@ Jupyter Notebook
     - 若修改了 NumPy 陣列中的內容，原本的張量內容也會一起修改
     - 若張量是存放在 GPU 中，PyTorch 會把內容複製一分到 CPU，並把資料型別轉換為 NumPy  陣列
     - PyTorch 張量預設型別為 32位元浮點數，而 NumPy 則是 64位元浮點數，引此轉換後要留意 dtype
+- PyTorch 要求圖片資料張量的軸順序為 **N(圖片張數 batch) X C(色彩通道) X H(高度) X W(寬度)**
