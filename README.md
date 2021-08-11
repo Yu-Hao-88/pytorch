@@ -84,3 +84,9 @@ Jupyter Notebook
     ```
     - 張量和 storage 的間接轉換讓一些操作(ex: 轉置張量或提取子張量)變得方便，因為記憶體無需重新分配，透過修改大小、偏移、步長產生一個新的張量
     - 轉置的概念就是 步長 x,y => y,x 交換
+- PyTorch 與 NumPy 的互通性:
+    - 使用 numpy() 轉換後會回傳一個與 points 相同 shape 和內容的 Numpy 多維陣列
+    - 這個 NumPy 陣列會跟張量共用同一個底層記憶體
+    - 若修改了 NumPy 陣列中的內容，原本的張量內容也會一起修改
+    - 若張量是存放在 GPU 中，PyTorch 會把內容複製一分到 CPU，並把資料型別轉換為 NumPy  陣列
+    - PyTorch 張量預設型別為 32位元浮點數，而 NumPy 則是 64位元浮點數，引此轉換後要留意 dtype
