@@ -616,7 +616,7 @@ dset = f.create_dataset('coords', data=points.numpy()) #先將張量轉換為 Nu
 f.close()
 
 
-# In[91]:
+# In[85]:
 
 
 f = h5py.File('ourpoints.hdf5', 'r') #讀入存有各個座標點資訊的 HDF5 檔，r 代表 read
@@ -625,14 +625,14 @@ last_points = dset[-2:] #取得最後兩個座標點 此時資料才被載入回
 last_points
 
 
-# In[89]:
+# In[86]:
 
 
 last_points = torch.from_numpy(dset[-2:]) #資料會被複製到張量的 storage 中
 f.close()
 
 
-# In[93]:
+# In[87]:
 
 
 #延伸思考
@@ -640,71 +640,92 @@ a = torch.tensor(list(range(9)))
 a
 
 
-# In[94]:
+# In[88]:
 
 
 a.size()
 
 
-# In[97]:
+# In[89]:
 
 
 a.storage_offset()
 
 
-# In[98]:
+# In[90]:
 
 
 a.stride()
 
 
-# In[99]:
+# In[91]:
 
 
 b = a.view(3, 3)
 b
 
 
-# In[100]:
+# In[92]:
 
 
 id(b.storage()) == id(a.storage())
 
 
-# In[102]:
+# In[93]:
 
 
 c = b[1:,1:]
 c
 
 
-# In[103]:
+# In[94]:
 
 
 c.size()
 
 
-# In[104]:
+# In[95]:
 
 
 c.storage_offset()
 
 
-# In[105]:
+# In[96]:
 
 
 c.stride()
 
 
-# In[113]:
+# In[97]:
 
 
 test = a.cos()
 test.dtype
 
 
-# In[125]:
+# In[98]:
 
 
 a.to(dtype=torch.float32).cos_()
+
+
+# In[101]:
+
+
+#進階索引
+a = torch.arange(10) #先創建一個 0 到 9 的 1 軸張量
+a
+
+
+# In[103]:
+
+
+b = a>=5 #判斷 a 張量中那些元素值 >= 5，並將判斷結果存在 b 張量 
+b
+
+
+# In[105]:
+
+
+a[b] #利用 b 這個佈林張量來篩選出符合條件的元素
 
