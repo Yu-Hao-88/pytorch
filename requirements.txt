@@ -28,4 +28,3 @@ imageio
 
 # future is here due to a missing dep in caffe2
 # future
-# test
