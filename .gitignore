@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#luna_data
+data/part2/luna_data
+python_file/luna/data-unversioned/cache
