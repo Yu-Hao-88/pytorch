@@ -95,6 +95,21 @@ Jupyter Notebook
 - Subset: 當只需以索引值來取出資料集的子集(subset)，可使用 Subset
 - ConcatDataset 能把擁有相容元素的多個資料集合併起來
 - ChainDataset 可以協助建立可迭代的(iterable)大型資料集
+- DataLoader:
+    - 四個常見的參數:
+        1. dataset 的物件
+        2. batch_size，批次量
+        3. num_workers，CPU 的核心數
+        4. pin_memory，bool 鎖定記憶體
+    ```python=
+    train_dl = DataLoader(
+        train_ds,
+        batch_size=batch_size, #批次量
+        num_workers=self.cli_args.num_workers, #運算單元的數量
+        pin_memory=self.use_cuda, #鎖定記憶體 (pinned memory) 可以快速轉移至 GPU
+    )
+    ```
+    - 可透過獨立的**程序**(process)與共享記憶體實現資料的**平行載入**。只要在創建 DataLoader 物件時指定 num_workers 參數，相關工作便會自動在背景完成。
 - 分類問題的 loss:
     - 就數學上來說，將 nn.LogSoftmax 和 nn.NLLLoss 一起使用的效果相當於 nn.CrossEntropyLoss
     - nn.NLLLoss 計算交叉熵時所用的輸入為對數化機率，而 nn.CrossEntropyLoss 的輸入則是未經 softmax 或 LogSoftmax 處理的預測分數(又稱為 logits)
@@ -120,6 +135,10 @@ Jupyter Notebook
         - 在val模式下，dropout層會讓所有的激活單元都通過，而batchnorm層會停止計算和更新mean和var，直接使用在訓練階段已經學出的mean和var值。
         - 該模式不會影響各層的gradient計算行為，即gradient計算和儲存與training模式一樣，只是不進行反向傳播（backprobagation）
     - with torch.no_grad(): 主要是用於停止autograd模塊的工作，以起到加速和節省記憶體的作用，具體行為就是停止gradient計算，從而節省了GPU算力和顯存，但是並不會影響dropout和batchnorm層的行為。
+- DataParallel vs DistributedDataParallel:
+    - DataParallel 相當於即插即用的模型包裹器 (wrapper)，適用於在單一機器上實現多 GPU 的利用
+    - DistributedDataParallel 適用於將運算任務分配給多個 GPU、多台機器執行，但設置相當複雜
+
 ## 筆記
 - 利用深度學習來完成任務需要的條件:
     1. 找到能處理輸入資料的方法
