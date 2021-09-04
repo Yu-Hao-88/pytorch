@@ -9,9 +9,9 @@ from torch.optim import SGD
 from torch.utils.data import DataLoader
 
 from util.util import enumerateWithEstimate
-from dsets import LunaDataset
+from dsets import PrepcacheLunaDataset, getCtSampleSize
 from util.logconf import logging
-from model import LunaModel
+# from .model import LunaModel
 
 log = logging.getLogger(__name__)
 # log.setLevel(logging.WARN)
@@ -36,6 +36,11 @@ class LunaPrepCacheApp:
                             default=8,
                             type=int,
                             )
+        # parser.add_argument('--scaled',
+        #     help="Scale the CT chunks to square voxels.",
+        #     default=False,
+        #     action='store_true',
+        # )
 
         self.cli_args = parser.parse_args(sys_argv)
 
@@ -43,8 +48,8 @@ class LunaPrepCacheApp:
         log.info("Starting {}, {}".format(type(self).__name__, self.cli_args))
 
         self.prep_dl = DataLoader(
-            LunaDataset(
-                sortby_str='series_uid',
+            PrepcacheLunaDataset(
+                # sortby_str='series_uid',
             ),
             batch_size=self.cli_args.batch_size,
             num_workers=self.cli_args.num_workers,
@@ -55,7 +60,7 @@ class LunaPrepCacheApp:
             "Stuffing cache",
             start_ndx=self.prep_dl.num_workers,
         )
-        for _ in batch_iter:
+        for batch_ndx, batch_tup in batch_iter:
             pass
 
 
