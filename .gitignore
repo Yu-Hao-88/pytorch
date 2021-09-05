@@ -132,3 +132,5 @@ dmypy.json
 data/part2/luna_data
 python_file/luna/data-unversioned/cache
 python_file/luna/runs
+
+*.pdf

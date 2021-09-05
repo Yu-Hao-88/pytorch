@@ -3,10 +3,10 @@ import datetime
 import hashlib
 import os
 import shutil
-import socket
 import sys
 
 import numpy as np
+from matplotlib import pyplot
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -15,10 +15,11 @@ import torch.nn as nn
 from torch.optim import SGD, Adam
 from torch.utils.data import DataLoader
 
+import dsets
+import model
+
 from util.util import enumerateWithEstimate
-from dsets import Luna2dSegmentationDataset, TrainingLuna2dSegmentationDataset, getCt
 from util.logconf import logging
-from model import UNetWrapper, SegmentationAugmentation
 
 log = logging.getLogger(__name__)
 # log.setLevel(logging.WARN)
@@ -26,19 +27,25 @@ log.setLevel(logging.INFO)
 log.setLevel(logging.DEBUG)
 
 # Used for computeBatchLoss and logMetrics to index into metrics_t/metrics_a
-METRICS_LABEL_NDX = 0  # 紀錄標籤的索引
-METRICS_PRED_NDX = 1  # 紀錄預設結果的索引
-METRICS_LOSS_NDX = 2  # 紀錄損失的索引
-METRICS_SIZE = 3  # 表現指標的數量
+# METRICS_LABEL_NDX = 0  # 紀錄標籤的索引
+# METRICS_PRED_NDX = 1  # 紀錄預設結果的索引
+# METRICS_LOSS_NDX = 2  # 紀錄損失的索引
+# METRICS_SIZE = 3  # 表現指標的數量
 
 # METRICS_PTP_NDX = 4
 # METRICS_PFN_NDX = 5
 # METRICS_MFP_NDX = 6
-METRICS_TP_NDX = 7
-METRICS_FN_NDX = 8
-METRICS_FP_NDX = 9
+# METRICS_TP_NDX = 7
+# METRICS_FN_NDX = 8
+# METRICS_FP_NDX = 9
 
-METRICS_SIZE = 10
+METRICS_LABEL_NDX = 0  # 紀錄標籤的索引
+METRICS_PRED_NDX = 1  # 紀錄預設結果的索引
+METRICS_PRED_P_NDX = 2  # 存放預測機率值
+METRICS_LOSS_NDX = 3  # 紀錄損失的索引
+METRICS_SIZE = 4  # 表現指標的數量
+
+# METRICS_SIZE = 10
 
 
 class LunaTrainingApp:
@@ -62,38 +69,32 @@ class LunaTrainingApp:
                             default=1,
                             type=int,
                             )
+        parser.add_argument('--dataset',
+                            help="What to dataset to feed the model.",
+                            action='store',
+                            default='LunaDataset',
+                            )
+        parser.add_argument('--model',
+                            help="What to model class name to use.",
+                            action='store',
+                            default='LunaModel',
+                            )
+        parser.add_argument('--malignant',
+                            help="Train the model to classify nodules as benign or malignant.",
+                            action='store_true',
+                            default=False,
+                            )
+        parser.add_argument('--finetune',
+                            help="Start finetuning from this model.",
+                            default='',
+                            )
+        parser.add_argument('--finetune-depth',
+                            help="Number of blocks (counted from the head) to include in finetuning",
+                            type=int,
+                            default=1,
+                            )
         parser.add_argument('--balanced',  # 若將此參數加入命令列，代表要使用平衡機制
                             help="Balance the training data to half positive, half negative.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augmented',
-                            help="Augment the training data.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augment-flip',
-                            help="Augment the training data by randomly flipping the data left-right, up-down, and front-back.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augment-offset',
-                            help="Augment the training data by randomly offsetting the data slightly along the X and Y axes.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augment-scale',
-                            help="Augment the training data by randomly increasing or decreasing the size of the candidate.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augment-rotate',
-                            help="Augment the training data by randomly rotating the data around the head-foot axis.",
-                            action='store_true',
-                            default=False,
-                            )
-        parser.add_argument('--augment-noise',
-                            help="Augment the training data by randomly adding noise to the data.",
                             action='store_true',
                             default=False,
                             )
@@ -118,47 +119,80 @@ class LunaTrainingApp:
 
         self.augmentation_dict = {}
         # 根據經驗這些數值是有效的，但不排除有更好的選擇存在
-        if self.cli_args.augmented or self.cli_args.augment_flip:
-            self.augmentation_dict['flip'] = True
-        if self.cli_args.augmented or self.cli_args.augment_offset:
-            self.augmentation_dict['offset'] = 0.1
-        if self.cli_args.augmented or self.cli_args.augment_scale:
-            self.augmentation_dict['scale'] = 0.2
-        if self.cli_args.augmented or self.cli_args.augment_rotate:
-            self.augmentation_dict['rotate'] = True
-        if self.cli_args.augmented or self.cli_args.augment_noise:
-            self.augmentation_dict['noise'] = 25.0
+        # if self.cli_args.augmented or self.cli_args.augment_flip:
+        self.augmentation_dict['flip'] = True
+        # if self.cli_args.augmented or self.cli_args.augment_offset:
+        self.augmentation_dict['offset'] = 0.1
+        # if self.cli_args.augmented or self.cli_args.augment_scale:
+        self.augmentation_dict['scale'] = 0.2
+        # if self.cli_args.augmented or self.cli_args.augment_rotate:
+        self.augmentation_dict['rotate'] = True
+        # if self.cli_args.augmented or self.cli_args.augment_noise:
+        self.augmentation_dict['noise'] = 25.0
 
         self.use_cuda = torch.cuda.is_available()  # 偵測電腦是否支援 CUDA
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
 
-        self.segmentation_model, self.augmentation_model = self.initModel()  # 初始化模型
+        self.model = self.initModel()  # 初始化模型
         self.optimizer = self.initOptimizer()  # 初始化優化器
 
     def initModel(self):
-        segmentation_model = UNetWrapper(
-            # UNet 的輸入資料共有 7 個通道(in_channels=7)，分別代表 6 個提供脈絡訊息的切片以及 1 個實際被分割的目標切片
-            in_channels=7,
-            n_classes=1,  # 輸出的分類類別數量為1，用來說明某體素是否屬於結節的一部份
-            depth=3,  # depth 用控制 U 型結構的深度:depth + 1 就會多加一層降採樣處理
-            wf=4,  # wf=4 表示 model 第一層將有 2^wf==16 個過濾器(每經一次降採樣，此數量會翻一倍)
-            padding=True,  # padding=True 表示要進行填補，如此一卷基層的輸出圖片大小才會與輸入相同
-            batch_norm=True,  # batch_norm=True 表示在每個神經網路的激活函數後面，都要進行批次正規化
-            up_mode='upconv',  # up_mode='upconv' 表示 model 的升採樣要使用升卷積模組
-        )
+        model_cls = getattr(model, self.cli_args.model)
+        model = model_cls()
 
-        augmentation_model = SegmentationAugmentation(**self.augmentation_dict)
-
+        if self.cli_args.finetune:
+            d = torch.load(self.cli_args.finetune, map_location='cpu')
+            model_blocks = [
+                n for n, subm in model.named_children()
+                if len(list(subm.parameters())) > 0  # 取出模型中有參數的模組，以供稍後使用
+            ]
+            # 取得最後的 1 或 2 層(由 fintune_depth 命令列引數決定，預設為 1)層來進行微調
+            finetune_blocks = model_blocks[-self.cli_args.finetune_depth:]
+            log.info(
+                f"finetuning from {self.cli_args.finetune}, blocks {' '.join(finetune_blocks)}")
+            model.load_state_dict(  # 載入現有權重到新模型中，但不包含最後的線性層
+                {
+                    k: v for k, v in d['model_state'].items()
+                    if k.split('.')[0] not in model_blocks[-1]  # 排除最後的線性層
+                },
+                strict=False,  # 不要求 所有參數都有對應的載入資料
+            )
+            # 設定除了 finetune_blocks 以外的區域都不使用梯度
+            for n, p in model.named_parameters():
+                if n.split('.')[0] not in finetune_blocks:
+                    p.requires_grad_(False)
         if self.use_cuda:
             log.info("Using CUDA; {} devices.".format(
                 torch.cuda.device_count()))
             if torch.cuda.device_count() > 1:
-                segmentation_model = nn.DataParallel(segmentation_model)
-                augmentation_model = nn.DataParallel(augmentation_model)
-            segmentation_model = segmentation_model.to(self.device)
-            augmentation_model = augmentation_model.to(self.device)
+                model = nn.DataParallel(model)
+            model = model.to(self.device)
+        return model
 
-        return segmentation_model, augmentation_model
+        # 在14章的時候沒用了
+        # segmentation_model = UNetWrapper(
+        #     # UNet 的輸入資料共有 7 個通道(in_channels=7)，分別代表 6 個提供脈絡訊息的切片以及 1 個實際被分割的目標切片
+        #     in_channels=7,
+        #     n_classes=1,  # 輸出的分類類別數量為1，用來說明某體素是否屬於結節的一部份
+        #     depth=3,  # depth 用控制 U 型結構的深度:depth + 1 就會多加一層降採樣處理
+        #     wf=4,  # wf=4 表示 model 第一層將有 2^wf==16 個過濾器(每經一次降採樣，此數量會翻一倍)
+        #     padding=True,  # padding=True 表示要進行填補，如此一卷基層的輸出圖片大小才會與輸入相同
+        #     batch_norm=True,  # batch_norm=True 表示在每個神經網路的激活函數後面，都要進行批次正規化
+        #     up_mode='upconv',  # up_mode='upconv' 表示 model 的升採樣要使用升卷積模組
+        # )
+
+        # augmentation_model = SegmentationAugmentation(**self.augmentation_dict)
+
+        # if self.use_cuda:
+        #     log.info("Using CUDA; {} devices.".format(
+        #         torch.cuda.device_count()))
+        #     if torch.cuda.device_count() > 1:
+        #         segmentation_model = nn.DataParallel(segmentation_model)
+        #         augmentation_model = nn.DataParallel(augmentation_model)
+        #     segmentation_model = segmentation_model.to(self.device)
+        #     augmentation_model = augmentation_model.to(self.device)
+
+        # return segmentation_model, augmentation_model
 
         # 在 13 章的時候沒使用
         # model = LunaModel()  # 創建一個 LunaModel 物件
@@ -174,13 +208,19 @@ class LunaTrainingApp:
         # 使用 SGD 優化器
         # return SGD(self.segmentation_model.parameters(), lr=0.001, momentum=0.99)
         # 將分割模型的參數傳進 Adam 優化器
-        return Adam(self.segmentation_model.parameters())
+        # return Adam(self.segmentation_model.parameters())
+        lr = 0.003 if self.cli_args.finetune else 0.001
+        return SGD(self.model.parameters(), lr=lr, weight_decay=1e-4)
+        # return Adam(self.model.parameters(), lr=3e-4)
 
     def initTrainDl(self):
-        train_ds = TrainingLuna2dSegmentationDataset(
+
+        ds_cls = getattr(dsets, self.cli_args.dataset)
+
+        train_ds = ds_cls(
             val_stride=10,
             isValSet_bool=False,
-            contextSlices_count=3,
+            ratio_int=1,
         )
 
         batch_size = self.cli_args.batch_size
@@ -197,10 +237,11 @@ class LunaTrainingApp:
         return train_dl
 
     def initValDl(self):
-        val_ds = Luna2dSegmentationDataset(
+        ds_cls = getattr(dsets, self.cli_args.dataset)
+
+        val_ds = ds_cls(
             val_stride=10,
             isValSet_bool=True,
-            contextSlices_count=3,
         )
 
         batch_size = self.cli_args.batch_size
@@ -517,68 +558,188 @@ class LunaTrainingApp:
                 # data item belongs where.
                 writer.flush()
 
-    def logMetrics(self, epoch_ndx, mode_str, metrics_t):
+    def logMetrics(
+            self,
+            epoch_ndx,
+            mode_str,
+            metrics_t,
+            classificationThreshold=0.5,
+    ):
+        self.initTensorboardWriters()
         log.info("E{} {}".format(
             epoch_ndx,
             type(self).__name__,
         ))
 
-        metrics_a = metrics_t.detach().numpy()
-        sum_a = metrics_a.sum(axis=1)
-        assert np.isfinite(metrics_a).all()
+        if self.cli_args.dataset == 'MalignantLunaDataset':
+            pos = 'mal'
+            neg = 'ben'
+        else:
+            pos = 'pos'
+            neg = 'neg'
 
-        allLabel_count = sum_a[METRICS_TP_NDX] + sum_a[METRICS_FN_NDX]
+        negLabel_mask = metrics_t[METRICS_LABEL_NDX] == 0
+        negPred_mask = metrics_t[METRICS_PRED_NDX] == 0
+
+        posLabel_mask = ~negLabel_mask
+        posPred_mask = ~negPred_mask
+
+        # benLabel_mask = metrics_t[METRICS_LABEL_NDX] == 1
+        # benPred_mask = metrics_t[METRICS_PRED_NDX] == 1
+        #
+        # malLabel_mask = metrics_t[METRICS_LABEL_NDX] == 2
+        # malPred_mask = metrics_t[METRICS_PRED_NDX] == 2
+
+        # benLabel_mask = ~malLabel_mask & posLabel_mask
+        # benPred_mask = ~malPred_mask & posLabel_mask
+
+        neg_count = int(negLabel_mask.sum())
+        pos_count = int(posLabel_mask.sum())
+        # ben_count = int(benLabel_mask.sum())
+        # mal_count = int(malLabel_mask.sum())
+
+        neg_correct = int((negLabel_mask & negPred_mask).sum())
+        pos_correct = int((posLabel_mask & posPred_mask).sum())
+        # ben_correct = int((benLabel_mask & benPred_mask).sum())
+        # mal_correct = int((malLabel_mask & malPred_mask).sum())
+
+        trueNeg_count = neg_correct
+        truePos_count = pos_correct
+
+        falsePos_count = neg_count - neg_correct
+        falseNeg_count = pos_count - pos_correct
 
         metrics_dict = {}
-        metrics_dict['loss/all'] = metrics_a[METRICS_LOSS_NDX].mean()
+        metrics_dict['loss/all'] = metrics_t[METRICS_LOSS_NDX].mean()
+        metrics_dict['loss/neg'] = metrics_t[METRICS_LOSS_NDX,
+                                             negLabel_mask].mean()
+        metrics_dict['loss/pos'] = metrics_t[METRICS_LOSS_NDX,
+                                             posLabel_mask].mean()
+        # metrics_dict['loss/ben'] = metrics_t[METRICS_LOSS_NDX, benLabel_mask].mean()
+        # metrics_dict['loss/mal'] = metrics_t[METRICS_LOSS_NDX, malLabel_mask].mean()
 
-        metrics_dict['percent_all/tp'] = \
-            sum_a[METRICS_TP_NDX] / (allLabel_count or 1) * 100
-        metrics_dict['percent_all/fn'] = \
-            sum_a[METRICS_FN_NDX] / (allLabel_count or 1) * 100
-        metrics_dict['percent_all/fp'] = \
-            sum_a[METRICS_FP_NDX] / (allLabel_count or 1) * \
-            100  # 此處的值可能會超過 100%，因為我們是拿 偽陽性數 和 被標記成候選節點的像素總數(只占整章圖的一小部分)做比較
+        metrics_dict['correct/all'] = (pos_correct +
+                                       neg_correct) / metrics_t.shape[1] * 100
+        metrics_dict['correct/neg'] = (neg_correct) / neg_count * 100
+        metrics_dict['correct/pos'] = (pos_correct) / pos_count * 100
+        # metrics_dict['correct/ben'] = (ben_correct) / ben_count * 100
+        # metrics_dict['correct/mal'] = (mal_correct) / mal_count * 100
 
-        precision = metrics_dict['pr/precision'] = sum_a[METRICS_TP_NDX] \
-            / ((sum_a[METRICS_TP_NDX] + sum_a[METRICS_FP_NDX]) or 1)
-        recall = metrics_dict['pr/recall'] = sum_a[METRICS_TP_NDX] \
-            / ((sum_a[METRICS_TP_NDX] + sum_a[METRICS_FN_NDX]) or 1)
+        precision = metrics_dict['pr/precision'] = \
+            truePos_count / np.float64(truePos_count + falsePos_count)
+        recall = metrics_dict['pr/recall'] = \
+            truePos_count / np.float64(truePos_count + falseNeg_count)
 
-        metrics_dict['pr/f1_score'] = 2 * (precision * recall) \
-            / ((precision + recall) or 1)
+        metrics_dict['pr/f1_score'] = \
+            2 * (precision * recall) / (precision + recall)
 
-        log.info(("E{} {:8} "
-                 + "{loss/all:.4f} loss, "
-                 + "{pr/precision:.4f} precision, "
-                 + "{pr/recall:.4f} recall, "
-                 + "{pr/f1_score:.4f} f1 score"
-                  ).format(
-            epoch_ndx,
-            mode_str,
-            **metrics_dict,
-        ))
-        log.info(("E{} {:8} "
-                  + "{loss/all:.4f} loss, "
-                  + "{percent_all/tp:-5.1f}% tp, {percent_all/fn:-5.1f}% fn, {percent_all/fp:-9.1f}% fp"
-                  ).format(
-            epoch_ndx,
-            mode_str + '_all',
-            **metrics_dict,
-        ))
+        threshold = torch.linspace(1, 0)
+        tpr = (metrics_t[None, METRICS_PRED_P_NDX, posLabel_mask]
+               >= threshold[:, None]).sum(1).float() / pos_count
+        fpr = (metrics_t[None, METRICS_PRED_P_NDX, negLabel_mask]
+               >= threshold[:, None]).sum(1).float() / neg_count
+        fp_diff = fpr[1:]-fpr[:-1]
+        tp_avg = (tpr[1:]+tpr[:-1])/2
+        auc = (fp_diff * tp_avg).sum()
+        metrics_dict['auc'] = auc
 
-        self.initTensorboardWriters()
+        log.info(
+            ("E{} {:8} {loss/all:.4f} loss, "
+             + "{correct/all:-5.1f}% correct, "
+             + "{pr/precision:.4f} precision, "
+             + "{pr/recall:.4f} recall, "
+             + "{pr/f1_score:.4f} f1 score, "
+             + "{auc:.4f} auc"
+             ).format(
+                epoch_ndx,
+                mode_str,
+                **metrics_dict,
+            )
+        )
+        log.info(
+            ("E{} {:8} {loss/neg:.4f} loss, "
+             + "{correct/neg:-5.1f}% correct ({neg_correct:} of {neg_count:})"
+             ).format(
+                epoch_ndx,
+                mode_str + '_' + neg,
+                neg_correct=neg_correct,
+                neg_count=neg_count,
+                **metrics_dict,
+            )
+        )
+        log.info(
+            ("E{} {:8} {loss/pos:.4f} loss, "
+             + "{correct/pos:-5.1f}% correct ({pos_correct:} of {pos_count:})"
+             ).format(
+                epoch_ndx,
+                mode_str + '_' + pos,
+                pos_correct=pos_correct,
+                pos_count=pos_count,
+                **metrics_dict,
+            )
+        )
+        # log.info(
+        #     ("E{} {:8} {loss/ben:.4f} loss, "
+        #          + "{correct/ben:-5.1f}% correct ({ben_correct:} of {ben_count:})"
+        #     ).format(
+        #         epoch_ndx,
+        #         mode_str + '_ben',
+        #         ben_correct=ben_correct,
+        #         ben_count=ben_count,
+        #         **metrics_dict,
+        #     )
+        # )
+        # log.info(
+        #     ("E{} {:8} {loss/mal:.4f} loss, "
+        #          + "{correct/mal:-5.1f}% correct ({mal_correct:} of {mal_count:})"
+        #     ).format(
+        #         epoch_ndx,
+        #         mode_str + '_mal',
+        #         mal_correct=mal_correct,
+        #         mal_count=mal_count,
+        #         **metrics_dict,
+        #     )
+        # )
         writer = getattr(self, mode_str + '_writer')
 
-        prefix_str = 'seg_'
-
         for key, value in metrics_dict.items():
-            writer.add_scalar(prefix_str + key, value,
-                              self.totalTrainingSamples_count)
+            key = key.replace('pos', pos)
+            key = key.replace('neg', neg)
+            writer.add_scalar(key, value, self.totalTrainingSamples_count)
 
-        writer.flush()
+        fig = pyplot.figure()
+        pyplot.plot(fpr, tpr)
+        writer.add_figure('roc', fig, self.totalTrainingSamples_count)
 
-        score = metrics_dict['pr/recall']  # 以召回率(recall)作為評分標準
+        writer.add_scalar('auc', auc, self.totalTrainingSamples_count)
+# # tag::logMetrics_writer_prcurve[]
+#        writer.add_pr_curve(
+#            'pr',
+#            metrics_t[METRICS_LABEL_NDX],
+#            metrics_t[METRICS_PRED_P_NDX],
+#            self.totalTrainingSamples_count,
+#        )
+# # end::logMetrics_writer_prcurve[]
+
+        bins = np.linspace(0, 1)
+
+        writer.add_histogram(
+            'label_neg',
+            metrics_t[METRICS_PRED_P_NDX, negLabel_mask],
+            self.totalTrainingSamples_count,
+            bins=bins
+        )
+        writer.add_histogram(
+            'label_pos',
+            metrics_t[METRICS_PRED_P_NDX, posLabel_mask],
+            self.totalTrainingSamples_count,
+            bins=bins
+        )
+
+        if not self.cli_args.malignant:
+            score = metrics_dict['pr/f1_score']
+        else:
+            score = metrics_dict['auc']
 
         return score
 
