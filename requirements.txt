@@ -22,6 +22,8 @@ scipy
 SimpleITK
 tensorflow>=1.14,<2
 imageio
+Flask
+sanic
 
 # The book was written targeting PyTorch 1.4, but everything in it should work fine with more up-to-date versions.
 # torch==1.4
